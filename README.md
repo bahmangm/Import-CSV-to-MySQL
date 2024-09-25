@@ -14,30 +14,30 @@ This repository contains a Python utility for importing CSV data into a MySQL da
 To use the utility, instantiate the `MysqlImporter` class with your MySQL connection details and call the `import_csv` method, specifying the target table name and CSV file path.
 
 ```python
-from add_tenant import MysqlImporter
+from mysql_importer import MysqlImporter
 
 # Example usage
 importer = MysqlImporter('localhost', 'root', 'mypassword', 'portfolio')
 importer.import_csv('netflix', 'netflix_titles.csv')
 importer.close()
+```
 
-
-##  Requirements
+## Requirements
 
 - Python 3.x
 - pandas
 - mysql-connector-python
 
-Installation
+## Installation
 
-    Clone the repository:
+Clone the repository:
 
-    bash
-
-git clone https://github.com/yourusername/Import-CSV-to-MySQL.git
+```bash
+git clone https://github.com/bahmangm/Import-CSV-to-MySQL.git
+```
 
 Install the required packages:
 
-bash
-
-    pip install pandas mysql-connector-python
+```bash
+pip install pandas mysql-connector-python
+```
