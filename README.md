@@ -6,8 +6,11 @@ This repository contains a Python utility for importing CSV data into a MySQL da
 
 - Connects to a MySQL database using provided credentials.
 - Automatically creates a table based on the CSV file structure if it doesn't already exist.
-- Handles different data types, including dates and long text.
+- Infers column data types (e.g., INT, FLOAT, VARCHAR, DATE) from the first 1000 rows of the CSV file.
+- Handles various data types, including dates, integers, floating-point numbers, and long text.
+- Parses date-like strings and converts them into proper `DATE` fields.
 - Includes error handling for CSV reading and date parsing.
+- Replaces missing values (`NaN`) with `NULL` in the database.
 
 ## Usage
 
@@ -27,6 +30,7 @@ importer.close()
 - Python 3.x
 - pandas
 - mysql-connector-python
+- python-dateutil
 
 ## Installation
 
@@ -39,5 +43,5 @@ git clone https://github.com/bahmangm/Import-CSV-to-MySQL.git
 Install the required packages:
 
 ```bash
-pip install pandas mysql-connector-python
+pip install pandas mysql-connector-python python-dateutil
 ```
