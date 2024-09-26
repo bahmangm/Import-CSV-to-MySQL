@@ -6,11 +6,13 @@ The MysqlImporter class connects to a MySQL database and imports data from a spe
 
 import mysql.connector
 import pandas as pd
+from dateutil.parser import parse
 
 class MysqlImporter():
     """
     A class to facilitate the import of CSV data into a MySQL database.
     """
+
 
     def __init__(self, host, user, password, database):
         """
@@ -35,7 +37,79 @@ class MysqlImporter():
             database=database
         )
         self.cursor = self.conn.cursor()
+    
+    
+    def is_date(self,string):
+        """
+        Checks if the given string can be parsed as a valid date.
 
+        Args:
+            string (str): The string to check.
+
+        Returns:
+            bool: True if the string is a valid date, False otherwise.
+        """
+        try:
+            parse(string, fuzzy=False)
+            return True
+        except (ValueError, TypeError):
+            return False
+        
+    
+    def to_date(self,string):
+        """
+        Parses the given string into a date if possible.
+
+        Args:
+            string (str): The string to parse.
+
+        Returns:
+            datetime or str: Parsed date or the original string if not a date.
+        """
+        try:
+            return parse(string, fuzzy=False)
+        except (ValueError, TypeError):
+            return string
+    
+
+    def infer_column_types(self, df):
+        """
+        Infers MySQL-compatible column types for a DataFrame.
+
+        Args:
+            df (pandas.DataFrame): The DataFrame to infer column types from.
+
+        Returns:
+            dict: A dictionary mapping column names to inferred MySQL types.
+        """
+        df_sample = df.head(1000)  # Consider the first 1000 rows
+        inferred_types = {}
+        
+        for col in df_sample.columns:
+            # Use pandas inference for types
+            col_type = pd.api.types.infer_dtype(df_sample[col], skipna=True)
+            
+            # Map inferred dtype to MySQL types
+            if col_type in ['integer', 'mixed-integer']:
+                inferred_types[col] = 'INT'
+            elif col_type in ['floating', 'mixed-integer-float']:
+                inferred_types[col] = 'FLOAT'
+            else:
+                # Check if the column is entirely date-like by testing each value. This check is
+                # more accurate than pandas inference. For example for a string like 'September 25, 2021'.
+                if df_sample[col].apply(lambda x: self.is_date(str(x)) if pd.notnull(x) else True).all():
+                    inferred_types[col] = 'DATE'
+                else:
+                    if col_type == 'datetime64' or col_type == 'date':
+                        inferred_types[col] = 'DATE'
+                    elif col_type in ['string', 'mixed', 'unicode']:
+                        inferred_types[col] = 'VARCHAR(255)' if df_sample[col].str.len().max() <= 255 else 'LONGTEXT'
+                    else:
+                        inferred_types[col] = 'VARCHAR(255)'  # Fallback
+
+        return inferred_types
+
+    
     def import_csv(self, table_name, csv_file_path):
         """
         Imports data from a CSV file into a specified MySQL table.
@@ -50,12 +124,13 @@ class MysqlImporter():
         except:
             df = pd.read_csv(csv_file_path, encoding='ISO-8859-1')
         
-        # Define the column types for the MySQL table based on the DataFrame columns
-        columns = [f"{col} DATE" if col in ['date_added',] 
-                   else f"{col} LONGTEXT" if col in ['cast',] 
-                   else f"{col} VARCHAR(255)" 
-                   for col in df.columns]
+        # Replace NaN values with None (equivalent to NULL in MySQL)
+        df = df.where(pd.notnull(df), None)
 
+        # Define the column types for the MySQL table based on the DataFrame columns
+        columns_types = self.infer_column_types(df)
+        
+        columns = [f"{k} {v}" for k,v in columns_types.items()]
         create_table_query = f"CREATE TABLE IF NOT EXISTS {table_name} ({', '.join(columns)});"
         self.cursor.execute(create_table_query)
         print(f"Table {table_name} created or already exists.")
@@ -63,17 +138,14 @@ class MysqlImporter():
         for index, row in df.iterrows():
             values = []
             for col, val in row.items():
-                # Check if the column is 'date_added' and format accordingly for MySQL
-                if col == 'date_added' and pd.notnull(val):
-                    try:
-                        # Parse the date in the format 'September 25, 2021'
-                        parsed_date = pd.to_datetime(val.strip(), format='%B %d, %Y')
-                        values.append(parsed_date.strftime('%Y-%m-%d'))
-                    except ValueError:
-                        # Set as NULL if parsing fails
-                        values.append(None)
+                if columns_types[col] == 'DATE':
+                    values.append(self.to_date(val) if val is not None else None)
+                elif columns_types[col] == 'INT':
+                    values.append(int(val) if val is not None else None)
+                elif columns_types[col] == 'FLOAT':
+                    values.append(float(val) if val is not None else None)
                 else:
-                    # For other columns, treat them as strings and escape quotes in them
+                    # For other types, treat them as strings and escape quotes in them
                     values.append(str(val).replace('"', "'") if pd.notnull(val) else None)
 
             # Create parameterized insert query
@@ -81,9 +153,6 @@ class MysqlImporter():
             placeholders = ', '.join(['%s'] * len(df.columns))
             insert_query = f"INSERT INTO {table_name} ({columns_str}) VALUES ({placeholders});"
             
-            print('='*50)
-            print(insert_query)
-            print('+'*50)
             # Execute the query with values as a tuple
             self.cursor.execute(insert_query, tuple(values))
 
