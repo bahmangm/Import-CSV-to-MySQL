@@ -129,6 +129,12 @@ class MysqlImporter():
 
         # Define the column types for the MySQL table based on the DataFrame columns
         columns_types = self.infer_column_types(df)
+
+        print('The type of each column:')
+        print('Column', ' : --> ', 'Type')
+        for column, col_type in columns_types.items():
+            print(column, ' : --> ', col_type)
+        print('-'*40)    
         
         columns = [f"{k} {v}" for k,v in columns_types.items()]
         create_table_query = f"CREATE TABLE IF NOT EXISTS {table_name} ({', '.join(columns)});"
@@ -139,11 +145,12 @@ class MysqlImporter():
             values = []
             for col, val in row.items():
                 if columns_types[col] == 'DATE':
-                    values.append(self.to_date(val) if val is not None else None)
+                    values.append(self.to_date(val) if (val is not None and pd.notnull(val)) else None)
+
                 elif columns_types[col] == 'INT':
-                    values.append(int(val) if val is not None else None)
+                    values.append(int(val) if (val is not None and pd.notnull(val)) else None)
                 elif columns_types[col] == 'FLOAT':
-                    values.append(float(val) if val is not None else None)
+                    values.append(float(val) if (val is not None and pd.notnull(val)) else None)
                 else:
                     # For other types, treat them as strings and escape quotes in them
                     values.append(str(val).replace('"', "'") if pd.notnull(val) else None)
